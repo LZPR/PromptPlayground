@@ -1,0 +1,9 @@
+node_modules/
+frontend/dist/
+src-tauri/target/
+src-tauri/gen/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example
