@@ -36,7 +36,7 @@ Install JavaScript dependencies once with `npm install`. The project uses the lo
 
 Required local tools are Node.js 22+, Rust stable/MSVC, Visual Studio 2022 C++ Build Tools and WebView2 for Windows. Android development additionally requires JDK 17, `ANDROID_HOME`, Android Command-line Tools, SDK Platform/Build Tools, NDK `30.0.15729638`, and the four targets declared in `rust-toolchain.toml`.
 
-On this workstation, `rustup` may fail with an access-denied error for `C:\Users\CJL\.cargo\bin\rustup-init.exe` after self-update. Repair the user-level Rustup installation before relying on normal `cargo` or Tauri commands; the project itself must not encode machine-specific toolchain paths as a workaround.
+Manage Rust toolchains through the user-level Rustup installation. The project itself must not encode machine-specific toolchain paths as a workaround.
 
 ## Coding Style & Naming Conventions
 

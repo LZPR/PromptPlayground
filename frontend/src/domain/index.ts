@@ -7,6 +7,18 @@ export {
   renameSession,
   takeGraphemes
 } from './session'
+export {
+  addMessage,
+  assertSessionTree,
+  createMessageNode,
+  editMessage,
+  insertMessage,
+  markMessagePendingDeletion,
+  markMessagesPendingDeletion,
+  permanentlyDeleteMessage,
+  restoreMessage,
+  swapAdjacentMessages
+} from './message'
 export type {
   AppendMessageInput,
   CreateSessionInput,
@@ -18,3 +30,12 @@ export type {
   SessionNode,
   VirtualRootNode
 } from './session'
+export type {
+  AddMessageInput,
+  BatchMessageStatusInput,
+  CreateMessageNodeInput,
+  EditMessageInput,
+  InsertMessageInput,
+  MessageStatusInput,
+  SwapAdjacentMessagesInput
+} from './message'
