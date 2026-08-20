@@ -12,6 +12,7 @@ Prompt Playground 是面向单个用户的、本地持久化的 AI Chat 软件�
 | --- | --- |
 | [会话](session.md) | 会话的创建、命名、克隆、删除和本地保存。 |
 | [聊天界面](chat-ui.md) | 布局、消息展示、底栏和显示模式。 |
+| [UI 视觉规格](ui-style.md) | 设计令牌、组件状态、响应式和无障碍要求。 |
 | [消息管理](message-management.md) | 单条消息操作、排序和批量选择。 |
 | [分支管理](branch-management.md) | 消息树、分支操作和树视图导航。 |
 | [生成与设置](generation-and-settings.md) | 全局模型设置、请求、流式响应和生成状态。 |

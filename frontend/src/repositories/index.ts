@@ -1,10 +1,12 @@
-/**
- * Persistence implementations belong here so Vue components never issue SQL.
- * Implementations and complete method signatures are introduced with their
- * corresponding domain model.
- */
+import type { MessageNode, Session } from '@/domain'
+
 export interface SessionRepository {
   readonly repositoryType: 'session'
+  loadAll(): Promise<readonly Session[]>
+  create(session: Session): Promise<void>
+  appendMessage(session: Session, message: MessageNode): Promise<void>
+  rename(session: Session): Promise<void>
+  delete(sessionId: string): Promise<void>
 }
 
 export interface MessageRepository {
@@ -14,3 +16,9 @@ export interface MessageRepository {
 export interface SettingsRepository {
   readonly repositoryType: 'settings'
 }
+
+export {
+  SESSION_DATABASE_URL,
+  SqliteSessionRepository
+} from './sqlite-session-repository'
+export type { SqlClient } from './sqlite-session-repository'
