@@ -11,6 +11,7 @@ export interface SessionRepository {
 
 export interface MessageRepository {
   readonly repositoryType: 'message'
+  saveMutation(previous: Session, next: Session): Promise<void>
 }
 
 export interface SettingsRepository {
@@ -21,4 +22,5 @@ export {
   SESSION_DATABASE_URL,
   SqliteSessionRepository
 } from './sqlite-session-repository'
+export { SqliteMessageRepository } from './sqlite-message-repository'
 export type { SqlClient } from './sqlite-session-repository'

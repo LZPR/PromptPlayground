@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { createSession } from '@/domain'
-import type { SessionRepository } from '@/repositories'
+import { appendMessage, createSession, editMessage } from '@/domain'
+import type { MessageRepository, SessionRepository } from '@/repositories'
 import { useSessionStore } from './sessions'
 
 const createdAt = '2026-08-20T00:00:00.000Z'
@@ -18,6 +18,38 @@ function createRepository(
     delete: vi.fn().mockResolvedValue(undefined),
     ...overrides
   }
+}
+
+function createMessageRepository(
+  overrides: Partial<MessageRepository> = {}
+): MessageRepository {
+  return {
+    repositoryType: 'message',
+    saveMutation: vi.fn().mockResolvedValue(undefined),
+    ...overrides
+  }
+}
+
+function branchSession() {
+  const withUser = appendMessage(
+    createSession({ id: 'session-1', rootId: 'root-1', createdAt }),
+    { id: 'u-1', role: 'user', text: 'Question', createdAt }
+  )
+  const withAnswer = appendMessage(withUser, {
+    id: 'a-1',
+    role: 'assistant',
+    text: 'Answer',
+    createdAt: '2026-08-20T00:01:00.000Z'
+  })
+
+  return editMessage(withAnswer, {
+    id: 'a-2',
+    targetId: 'a-1',
+    role: 'assistant',
+    text: 'Alternative answer',
+    createBranch: true,
+    updatedAt: '2026-08-20T00:02:00.000Z'
+  })
 }
 
 describe('[session store] initialize [restores sessions and current selection]', () => {
@@ -82,5 +114,30 @@ describe('[session store] mutations [persist before updating local state]', () =
 
     expect(store.sessions).toEqual([session])
     expect(store.currentSessionId).toBe('session-1')
+  })
+
+  it.each([
+    ['select', (store: ReturnType<typeof useSessionStore>, repository: MessageRepository) => store.selectCurrentLeaf(repository, 'a-1')],
+    ['copy', (store: ReturnType<typeof useSessionStore>, repository: MessageRepository) => store.copyCurrentBranch(repository)],
+    ['switch', (store: ReturnType<typeof useSessionStore>, repository: MessageRepository) => store.switchDirectChildBranch(repository, 'u-1', 'previous')],
+    ['delete', (store: ReturnType<typeof useSessionStore>, repository: MessageRepository) => store.deleteBranch(repository, 'a-2')]
+  ])('does not update the current session when branch %s persistence fails', async (_, operation) => {
+    setActivePinia(createPinia())
+    const session = branchSession()
+    const sessionRepository = createRepository({
+      loadAll: vi.fn().mockResolvedValue([session])
+    })
+    const messageRepository = createMessageRepository({
+      saveMutation: vi.fn().mockRejectedValue(new Error('write failed'))
+    })
+    const store = useSessionStore()
+    await store.initialize(sessionRepository)
+
+    await expect(operation(store, messageRepository)).rejects.toThrow(
+      'write failed'
+    )
+
+    expect(store.sessions).toEqual([session])
+    expect(store.currentSession).toEqual(session)
   })
 })

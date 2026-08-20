@@ -1,12 +1,17 @@
 import { defineStore } from 'pinia'
 import {
   appendMessage as appendMessageToSession,
+  copyCurrentBranch as copyCurrentSessionBranch,
   createSession as createSessionModel,
+  deleteBranch as deleteSessionBranch,
   deleteSession,
-  renameSession
+  getCurrentBranchPath,
+  renameSession,
+  selectCurrentLeaf as selectSessionCurrentLeaf,
+  switchDirectChildBranch as switchSessionDirectChildBranch
 } from '@/domain'
 import type { MessageRole, Session } from '@/domain'
-import type { SessionRepository } from '@/repositories'
+import type { MessageRepository, SessionRepository } from '@/repositories'
 
 export interface AppendSessionMessageInput {
   readonly role: MessageRole
@@ -78,6 +83,60 @@ export const useSessionStore = defineStore('sessions', {
       })
 
       await repository.rename(nextSession)
+      this.replaceSession(nextSession)
+      return nextSession
+    },
+
+    async selectCurrentLeaf(repository: MessageRepository, leafId: string) {
+      const session = this.requireCurrentSession()
+      const nextSession = selectSessionCurrentLeaf(session, {
+        leafId,
+        updatedAt: new Date().toISOString()
+      })
+
+      await repository.saveMutation(session, nextSession)
+      this.replaceSession(nextSession)
+      return nextSession
+    },
+
+    async copyCurrentBranch(repository: MessageRepository) {
+      const session = this.requireCurrentSession()
+      const sourcePath = getCurrentBranchPath(session)
+      const nextSession = copyCurrentSessionBranch(session, {
+        ids: sourcePath.map(() => crypto.randomUUID()),
+        updatedAt: new Date().toISOString()
+      })
+
+      await repository.saveMutation(session, nextSession)
+      this.replaceSession(nextSession)
+      return nextSession
+    },
+
+    async switchDirectChildBranch(
+      repository: MessageRepository,
+      forkId: string,
+      direction: 'previous' | 'next'
+    ) {
+      const session = this.requireCurrentSession()
+      const nextSession = switchSessionDirectChildBranch(session, {
+        forkId,
+        direction,
+        updatedAt: new Date().toISOString()
+      })
+
+      await repository.saveMutation(session, nextSession)
+      this.replaceSession(nextSession)
+      return nextSession
+    },
+
+    async deleteBranch(repository: MessageRepository, entryId: string) {
+      const session = this.requireCurrentSession()
+      const nextSession = deleteSessionBranch(session, {
+        entryId,
+        updatedAt: new Date().toISOString()
+      })
+
+      await repository.saveMutation(session, nextSession)
       this.replaceSession(nextSession)
       return nextSession
     },

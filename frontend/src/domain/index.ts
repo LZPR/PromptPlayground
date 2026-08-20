@@ -19,6 +19,15 @@ export {
   restoreMessage,
   swapAdjacentMessages
 } from './message'
+export {
+  copyCurrentBranch,
+  countBranchMessages,
+  deleteBranch,
+  getCurrentBranchPath,
+  getDirectChildBranches,
+  selectCurrentLeaf,
+  switchDirectChildBranch
+} from './branch'
 export type {
   AppendMessageInput,
   CreateSessionInput,
@@ -39,3 +48,10 @@ export type {
   MessageStatusInput,
   SwapAdjacentMessagesInput
 } from './message'
+export type {
+  CopyCurrentBranchInput,
+  DeleteBranchInput,
+  DirectChildBranch,
+  SelectCurrentLeafInput,
+  SwitchDirectChildBranchInput
+} from './branch'
