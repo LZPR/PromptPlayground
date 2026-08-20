@@ -1,4 +1,4 @@
-import { getCurrentPath, takeGraphemes } from './session'
+import { getCurrentPath, nextBranchOrder, takeGraphemes } from './session'
 import type {
   MessageNode,
   MessageRole,
@@ -14,6 +14,7 @@ export interface CreateMessageNodeInput {
   readonly role: MessageRole
   readonly text: string
   readonly createdOrder: number
+  readonly branchOrder?: number
   readonly createdAt: string
 }
 
@@ -70,6 +71,7 @@ export function createMessageNode(input: CreateMessageNodeInput): MessageNode {
     text: input.text,
     status: 'normal',
     createdOrder: input.createdOrder,
+    branchOrder: input.branchOrder ?? input.createdOrder,
     createdAt: input.createdAt,
     updatedAt: input.createdAt
   }
@@ -372,6 +374,18 @@ export function assertSessionTree(session: Session): void {
     }
   }
 
+  for (const branch of Object.values(session.emptyBranches)) {
+    if (session.nodes[branch.id] !== undefined) {
+      throw new Error(`Empty branch ID conflicts with a session node: ${branch.id}`)
+    }
+    if (session.nodes[branch.anchorId] === undefined) {
+      throw new Error(`Empty branch anchor does not exist: ${branch.id}`)
+    }
+    if (branch.branchOrder < 1) {
+      throw new Error(`Empty branch order must be positive: ${branch.id}`)
+    }
+  }
+
   for (const node of nodes) {
     if (node.kind !== 'message') {
       continue
@@ -381,6 +395,9 @@ export function assertSessionTree(session: Session): void {
     }
     if (incomingParents.get(node.id) !== 1) {
       throw new Error(`Message must have exactly one parent: ${node.id}`)
+    }
+    if (node.branchOrder < 1) {
+      throw new Error(`Message branch order must be positive: ${node.id}`)
     }
   }
 
@@ -404,6 +421,13 @@ export function assertSessionTree(session: Session): void {
     throw new Error(
       'Session contains messages unreachable from the virtual root'
     )
+  }
+  if (session.currentEmptyBranchId !== null) {
+    if (session.currentLeafId !== null) {
+      throw new Error('Current branch cannot select a leaf and an empty branch')
+    }
+    getCurrentPath(session)
+    return
   }
   if (session.currentLeafId === null) {
     if (nodes.length !== 1) {
@@ -491,9 +515,16 @@ function finish(
   session: Session,
   nodes: Readonly<Record<string, SessionNode>>,
   currentLeafId: string | null,
-  updatedAt: string
+  updatedAt: string,
+  currentEmptyBranchId: string | null = session.currentEmptyBranchId
 ): Session {
-  const nextSession: Session = { ...session, nodes, currentLeafId, updatedAt }
+  const nextSession: Session = {
+    ...session,
+    nodes,
+    currentLeafId,
+    currentEmptyBranchId,
+    updatedAt
+  }
   assertSessionTree(nextSession)
   return nextSession
 }
@@ -531,6 +562,7 @@ function newMessage(
     role,
     text,
     createdOrder: nextCreatedOrder(session),
+    branchOrder: nextBranchOrder(session),
     createdAt
   })
 }

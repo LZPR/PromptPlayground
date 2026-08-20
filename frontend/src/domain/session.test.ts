@@ -69,6 +69,44 @@ describe('[session] append [maintains the current root-to-leaf path]', () => {
       'Virtual root cannot be the current leaf'
     )
   })
+
+  it('materializes the selected empty branch with its stable branch order', () => {
+    const source = appendMessage(emptySession(), {
+      id: 'user-1',
+      role: 'user',
+      text: 'Anchor',
+      createdAt
+    })
+    const withEmptyBranch = {
+      ...source,
+      currentLeafId: null,
+      currentEmptyBranchId: 'empty-1',
+      emptyBranches: {
+        'empty-1': {
+          id: 'empty-1',
+          anchorId: 'user-1',
+          branchOrder: 8,
+          createdAt,
+          updatedAt: createdAt
+        }
+      }
+    }
+
+    const next = appendMessage(withEmptyBranch, {
+      id: 'user-2',
+      role: 'user',
+      text: 'Materialized',
+      createdAt: '2026-08-20T00:01:00.000Z'
+    })
+
+    expect(next.nodes['user-2']).toMatchObject({
+      parentId: 'user-1',
+      branchOrder: 8
+    })
+    expect(next.emptyBranches).toEqual({})
+    expect(next.currentLeafId).toBe('user-2')
+    expect(next.currentEmptyBranchId).toBeNull()
+  })
 })
 
 describe('[session] automatic title [runs once for the first non-system message]', () => {

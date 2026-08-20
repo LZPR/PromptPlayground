@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { appendMessage, createSession, renameSession } from '@/domain'
+import { SqliteMessageRepository } from './sqlite-message-repository'
 import { SqliteSessionRepository } from './sqlite-session-repository'
 import type { SqlClient } from './sqlite-session-repository'
 
@@ -32,6 +33,7 @@ describe('[session repository] load [maps persisted nodes into a current path]',
           title_initialized: 1,
           root_id: 'root-1',
           current_leaf_id: 'user-1',
+          current_empty_branch_id: null,
           created_at: createdAt,
           updated_at: '2026-08-20T00:02:00.000Z'
         }
@@ -46,6 +48,7 @@ describe('[session repository] load [maps persisted nodes into a current path]',
           text: null,
           status: null,
           created_order: null,
+          branch_order: null,
           created_at: createdAt,
           updated_at: createdAt
         },
@@ -58,6 +61,7 @@ describe('[session repository] load [maps persisted nodes into a current path]',
           text: 'System',
           status: 'normal',
           created_order: 1,
+          branch_order: 1,
           created_at: createdAt,
           updated_at: createdAt
         },
@@ -70,6 +74,7 @@ describe('[session repository] load [maps persisted nodes into a current path]',
           text: 'Hello',
           status: 'normal',
           created_order: 2,
+          branch_order: 2,
           created_at: '2026-08-20T00:01:00.000Z',
           updated_at: '2026-08-20T00:01:00.000Z'
         }
@@ -85,6 +90,32 @@ describe('[session repository] load [maps persisted nodes into a current path]',
       createdOrder: 2,
       text: 'Hello'
     })
+  })
+
+  it('restores an empty branch selection separately from message nodes', async () => {
+    const client = new FakeSqlClient([
+      [{
+        id: 'session-1', title: '新会话', title_initialized: 0, root_id: 'root-1',
+        current_leaf_id: null, current_empty_branch_id: 'empty-1',
+        created_at: createdAt, updated_at: createdAt
+      }],
+      [{
+        id: 'root-1', session_id: 'session-1', parent_id: null, node_type: 'root',
+        role: null, text: null, status: null, created_order: null, branch_order: null,
+        created_at: createdAt, updated_at: createdAt
+      }],
+      [{
+        id: 'empty-1', session_id: 'session-1', anchor_id: 'root-1', branch_order: 1,
+        created_at: createdAt, updated_at: createdAt
+      }]
+    ])
+
+    const [session] = await new SqliteSessionRepository(client).loadAll()
+
+    expect(session.currentLeafId).toBeNull()
+    expect(session.currentEmptyBranchId).toBe('empty-1')
+    expect(session.emptyBranches['empty-1']).toMatchObject({ anchorId: 'root-1' })
+    expect(Object.keys(session.nodes)).toEqual(['root-1'])
   })
 })
 
@@ -106,6 +137,7 @@ describe('[session repository] persist [uses parameterized statements]', () => {
       '新会话',
       0,
       'root-1',
+      null,
       null,
       createdAt,
       createdAt
@@ -131,12 +163,10 @@ describe('[session repository] persist [uses parameterized statements]', () => {
         createdAt: '2026-08-20T00:01:00.000Z'
       }
     )
-    const message = appended.nodes['user-1']
-    if (message === undefined || message.kind !== 'message') {
-      throw new Error('Expected test message')
-    }
-
-    await repository.appendMessage(appended, message)
+    await new SqliteMessageRepository(client).saveMutation(
+      createSession({ id: 'session-1', rootId: 'root-1', createdAt }),
+      appended
+    )
     await repository.rename(
       renameSession(appended, {
         title: 'Renamed',
@@ -145,24 +175,24 @@ describe('[session repository] persist [uses parameterized statements]', () => {
     )
     await repository.delete('session-1')
 
-    expect(client.executions[0].query).toContain('INSERT INTO session_nodes')
-    expect(client.executions[0].values).toContain('user-1')
-    expect(client.executions[1].query).toContain('UPDATE sessions')
-    expect(client.executions[1].values).toEqual([
-      'Hello',
-      1,
+    expect(client.executions[1].query).toContain('INSERT INTO session_nodes')
+    expect(client.executions[1].values).toContain('user-1')
+    expect(client.executions[2].query).toContain('UPDATE sessions')
+    expect(client.executions[2].values).toEqual([
       'user-1',
+      null,
       '2026-08-20T00:01:00.000Z',
       'session-1'
     ])
-    expect(client.executions[2].values).toEqual([
+    expect(client.executions[4].values).toEqual([
       'Renamed',
       1,
       'user-1',
+      null,
       '2026-08-20T00:02:00.000Z',
       'session-1'
     ])
-    expect(client.executions[3]).toEqual({
+    expect(client.executions[5]).toEqual({
       query: 'DELETE FROM sessions WHERE id = $1',
       values: ['session-1']
     })

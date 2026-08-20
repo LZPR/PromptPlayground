@@ -12,6 +12,9 @@ export default [
   {
     files: ['frontend/**/*.{ts,vue}', '*.{ts,js}'],
     languageOptions: {
+      parserOptions: {
+        parser: tseslint.parser
+      },
       globals: globals.browser
     }
   },

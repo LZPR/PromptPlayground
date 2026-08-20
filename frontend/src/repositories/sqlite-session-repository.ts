@@ -1,6 +1,7 @@
 import Database from '@tauri-apps/plugin-sql'
 import { getCurrentPath } from '@/domain'
 import type {
+  EmptyBranch,
   MessageNode,
   MessageRole,
   MessageStatus,
@@ -23,6 +24,7 @@ interface SessionRow {
   title_initialized: number | boolean
   root_id: string
   current_leaf_id: string | null
+  current_empty_branch_id: string | null
   created_at: string
   updated_at: string
 }
@@ -36,6 +38,16 @@ interface NodeRow {
   text: string | null
   status: MessageStatus | null
   created_order: number | null
+  branch_order: number | null
+  created_at: string
+  updated_at: string
+}
+
+interface EmptyBranchRow {
+  id: string
+  session_id: string
+  anchor_id: string
+  branch_order: number
   created_at: string
   updated_at: string
 }
@@ -53,23 +65,29 @@ export class SqliteSessionRepository implements SessionRepository {
 
   async loadAll(): Promise<readonly Session[]> {
     const client = await this.clientPromise
-    const [sessionRows, nodeRows] = await Promise.all([
+    const [sessionRows, nodeRows, emptyBranchRows] = await Promise.all([
       client.select<SessionRow[]>(
-        `SELECT id, title, title_initialized, root_id, current_leaf_id, created_at, updated_at
+        `SELECT id, title, title_initialized, root_id, current_leaf_id, current_empty_branch_id, created_at, updated_at
          FROM sessions
          ORDER BY updated_at DESC, id ASC`
       ),
       client.select<NodeRow[]>(
-        `SELECT id, session_id, parent_id, node_type, role, text, status, created_order, created_at, updated_at
+        `SELECT id, session_id, parent_id, node_type, role, text, status, created_order, branch_order, created_at, updated_at
          FROM session_nodes
          ORDER BY session_id ASC, created_order ASC, id ASC`
+      ),
+      client.select<EmptyBranchRow[]>(
+        `SELECT id, session_id, anchor_id, branch_order, created_at, updated_at
+         FROM empty_branches
+         ORDER BY session_id ASC, branch_order ASC, id ASC`
       )
     ])
 
     return sessionRows.map((row) =>
       mapSession(
         row,
-        nodeRows.filter((node) => node.session_id === row.id)
+        nodeRows.filter((node) => node.session_id === row.id),
+        emptyBranchRows.filter((branch) => branch.session_id === row.id)
       )
     )
   }
@@ -79,14 +97,15 @@ export class SqliteSessionRepository implements SessionRepository {
     const root = getRoot(session)
 
     await client.execute(
-      `INSERT INTO sessions (id, title, title_initialized, root_id, current_leaf_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `INSERT INTO sessions (id, title, title_initialized, root_id, current_leaf_id, current_empty_branch_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         session.id,
         session.title,
         session.titleInitialized ? 1 : 0,
         session.rootId,
         session.currentLeafId,
+        session.currentEmptyBranchId,
         session.createdAt,
         session.updatedAt
       ]
@@ -97,28 +116,6 @@ export class SqliteSessionRepository implements SessionRepository {
        VALUES ($1, $2, NULL, 'root', NULL, NULL, NULL, NULL, $3, $4)`,
       [root.id, session.id, session.createdAt, session.updatedAt]
     )
-  }
-
-  async appendMessage(session: Session, message: MessageNode): Promise<void> {
-    const client = await this.clientPromise
-
-    await client.execute(
-      `INSERT INTO session_nodes
-         (id, session_id, parent_id, node_type, role, text, status, created_order, created_at, updated_at)
-       VALUES ($1, $2, $3, 'message', $4, $5, $6, $7, $8, $9)`,
-      [
-        message.id,
-        session.id,
-        message.parentId,
-        message.role,
-        message.text,
-        message.status,
-        message.createdOrder,
-        message.createdAt,
-        message.updatedAt
-      ]
-    )
-    await this.saveSessionMetadata(client, session)
   }
 
   async rename(session: Session): Promise<void> {
@@ -137,12 +134,13 @@ export class SqliteSessionRepository implements SessionRepository {
   ): Promise<void> {
     await client.execute(
       `UPDATE sessions
-       SET title = $1, title_initialized = $2, current_leaf_id = $3, updated_at = $4
-       WHERE id = $5`,
+       SET title = $1, title_initialized = $2, current_leaf_id = $3, current_empty_branch_id = $4, updated_at = $5
+       WHERE id = $6`,
       [
         session.title,
         session.titleInitialized ? 1 : 0,
         session.currentLeafId,
+        session.currentEmptyBranchId,
         session.updatedAt,
         session.id
       ]
@@ -158,7 +156,11 @@ function getRoot(session: Session): VirtualRootNode {
   return root
 }
 
-function mapSession(row: SessionRow, rows: readonly NodeRow[]): Session {
+function mapSession(
+  row: SessionRow,
+  rows: readonly NodeRow[],
+  emptyRows: readonly EmptyBranchRow[]
+): Session {
   const nodes = new Map<string, SessionNode>()
 
   for (const node of rows) {
@@ -172,7 +174,8 @@ function mapSession(row: SessionRow, rows: readonly NodeRow[]): Session {
       node.role === null ||
       node.text === null ||
       node.status === null ||
-      node.created_order === null
+      node.created_order === null ||
+      node.branch_order === null
     ) {
       throw new Error(`Persisted message node is incomplete: ${node.id}`)
     }
@@ -186,6 +189,7 @@ function mapSession(row: SessionRow, rows: readonly NodeRow[]): Session {
       text: node.text,
       status: node.status,
       createdOrder: node.created_order,
+      branchOrder: node.branch_order,
       createdAt: node.created_at,
       updatedAt: node.updated_at
     })
@@ -211,7 +215,7 @@ function mapSession(row: SessionRow, rows: readonly NodeRow[]): Session {
     const children = (childrenByParent.get(nodeId) ?? [])
       .sort(
         (left, right) =>
-          left.createdOrder - right.createdOrder ||
+          left.branchOrder - right.branchOrder ||
           left.id.localeCompare(right.id)
       )
       .map((child) => child.id)
@@ -225,6 +229,16 @@ function mapSession(row: SessionRow, rows: readonly NodeRow[]): Session {
       row.title_initialized === true || row.title_initialized === 1,
     rootId: row.root_id,
     currentLeafId: row.current_leaf_id,
+    currentEmptyBranchId: row.current_empty_branch_id ?? null,
+    emptyBranches: Object.fromEntries(
+      emptyRows.map((branch): [string, EmptyBranch] => [branch.id, {
+        id: branch.id,
+        anchorId: branch.anchor_id,
+        branchOrder: branch.branch_order,
+        createdAt: branch.created_at,
+        updatedAt: branch.updated_at
+      }])
+    ),
     nodes: mappedNodes,
     createdAt: row.created_at,
     updatedAt: row.updated_at

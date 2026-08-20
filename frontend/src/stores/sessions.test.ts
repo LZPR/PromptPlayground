@@ -101,15 +101,15 @@ describe('[session store] mutations [persist before updating local state]', () =
       rootId: 'root-1',
       createdAt
     })
-    const repository = createRepository({
-      loadAll: vi.fn().mockResolvedValue([session]),
-      appendMessage: vi.fn().mockRejectedValue(new Error('write failed'))
+    const repository = createRepository({ loadAll: vi.fn().mockResolvedValue([session]) })
+    const messageRepository = createMessageRepository({
+      saveMutation: vi.fn().mockRejectedValue(new Error('write failed'))
     })
     const store = useSessionStore()
     await store.initialize(repository)
 
     await expect(
-      store.appendMessage(repository, { role: 'user', text: 'Hello' })
+      store.appendMessage(messageRepository, { role: 'user', text: 'Hello' })
     ).rejects.toThrow('write failed')
 
     expect(store.sessions).toEqual([session])

@@ -38,6 +38,7 @@ function node(
     role,
     text: `${id} text`,
     status,
+    branchOrder: createdOrder,
     createdOrder,
     createdAt,
     updatedAt: createdAt
@@ -55,6 +56,8 @@ function session(
     titleInitialized: false,
     rootId: 'root-1',
     currentLeafId,
+    currentEmptyBranchId: null,
+    emptyBranches: {},
     nodes: {
       'root-1': { kind: 'root', id: 'root-1', childIds: rootChildren },
       ...Object.fromEntries(nodes.map((message) => [message.id, message]))

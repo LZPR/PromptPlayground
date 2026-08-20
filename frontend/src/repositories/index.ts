@@ -1,10 +1,9 @@
-import type { MessageNode, Session } from '@/domain'
+import type { Session } from '@/domain'
 
 export interface SessionRepository {
   readonly repositoryType: 'session'
   loadAll(): Promise<readonly Session[]>
   create(session: Session): Promise<void>
-  appendMessage(session: Session, message: MessageNode): Promise<void>
   rename(session: Session): Promise<void>
   delete(sessionId: string): Promise<void>
 }

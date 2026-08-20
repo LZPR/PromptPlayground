@@ -8,6 +8,7 @@ import {
   deleteBranch,
   getDirectChildBranches,
   selectCurrentLeaf,
+  selectCurrentEmptyBranch,
   switchDirectChildBranch
 } from './branch'
 
@@ -30,6 +31,7 @@ function node(
     role,
     text: `${id} text`,
     status,
+    branchOrder: createdOrder,
     createdOrder,
     createdAt,
     updatedAt: createdAt
@@ -47,6 +49,8 @@ function session(
     titleInitialized: false,
     rootId: 'root-1',
     currentLeafId,
+    currentEmptyBranchId: null,
+    emptyBranches: {},
     nodes: {
       'root-1': { kind: 'root', id: 'root-1', childIds: rootChildren },
       ...Object.fromEntries(nodes.map((message) => [message.id, message]))
@@ -195,6 +199,51 @@ describe('[branch] copy [creates independent latest parallel paths]', () => {
       })
     ).toThrow('Copied branch IDs must match')
     expect(source).toEqual(nestedForkSession())
+  })
+})
+
+describe('[branch] empty branch [uses a separate selectable record]', () => {
+  it('orders, selects, copies, and deletes empty branches without changing messages', () => {
+    const source = {
+      ...siblingSession('a-1'),
+      emptyBranches: {
+        'empty-1': {
+          id: 'empty-1',
+          anchorId: 'u-1',
+          branchOrder: 3,
+          createdAt,
+          updatedAt: createdAt
+        }
+      }
+    }
+    const selected = selectCurrentEmptyBranch(source, {
+      emptyBranchId: 'empty-1',
+      updatedAt: changedAt
+    })
+    const copied = copyCurrentBranch(selected, {
+      ids: [],
+      emptyBranchId: 'empty-2',
+      updatedAt: changedAt
+    })
+    const deleted = deleteBranch(copied, {
+      entryId: 'empty-2',
+      updatedAt: '2026-08-20T00:02:00.000Z'
+    })
+
+    expect(getDirectChildBranches(source, 'u-1').map(({ entry }) => entry.value.id)).toEqual([
+      'a-1',
+      'a-2',
+      'empty-1',
+      'a-3'
+    ])
+    expect(ids(selected)).toEqual(['u-1'])
+    expect(copied.emptyBranches['empty-2']).toMatchObject({
+      anchorId: 'u-1',
+      branchOrder: 5
+    })
+    expect(deleted.emptyBranches['empty-2']).toBeUndefined()
+    expect(deleted.currentLeafId).toBe('a-3')
+    expect(deleted.nodes).toEqual(source.nodes)
   })
 })
 

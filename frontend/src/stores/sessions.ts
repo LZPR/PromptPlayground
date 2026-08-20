@@ -8,6 +8,7 @@ import {
   getCurrentBranchPath,
   renameSession,
   selectCurrentLeaf as selectSessionCurrentLeaf,
+  selectCurrentEmptyBranch as selectSessionCurrentEmptyBranch,
   switchDirectChildBranch as switchSessionDirectChildBranch
 } from '@/domain'
 import type { MessageRole, Session } from '@/domain'
@@ -52,7 +53,7 @@ export const useSessionStore = defineStore('sessions', {
     },
 
     async appendMessage(
-      repository: SessionRepository,
+      repository: MessageRepository,
       input: AppendSessionMessageInput
     ) {
       const session = this.requireCurrentSession()
@@ -70,7 +71,7 @@ export const useSessionStore = defineStore('sessions', {
         throw new Error('Appended message is missing from the session')
       }
 
-      await repository.appendMessage(nextSession, message)
+      await repository.saveMutation(session, nextSession)
       this.replaceSession(nextSession)
       return nextSession
     },
@@ -99,11 +100,30 @@ export const useSessionStore = defineStore('sessions', {
       return nextSession
     },
 
+    async selectCurrentEmptyBranch(
+      repository: MessageRepository,
+      emptyBranchId: string
+    ) {
+      const session = this.requireCurrentSession()
+      const nextSession = selectSessionCurrentEmptyBranch(session, {
+        emptyBranchId,
+        updatedAt: new Date().toISOString()
+      })
+
+      await repository.saveMutation(session, nextSession)
+      this.replaceSession(nextSession)
+      return nextSession
+    },
+
     async copyCurrentBranch(repository: MessageRepository) {
       const session = this.requireCurrentSession()
       const sourcePath = getCurrentBranchPath(session)
       const nextSession = copyCurrentSessionBranch(session, {
         ids: sourcePath.map(() => crypto.randomUUID()),
+        emptyBranchId:
+          session.currentEmptyBranchId === null
+            ? undefined
+            : crypto.randomUUID(),
         updatedAt: new Date().toISOString()
       })
 

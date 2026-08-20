@@ -19,11 +19,21 @@ export interface MessageNode {
   readonly text: string
   readonly status: MessageStatus
   readonly createdOrder: number
+  /** Stable order among branch entries; independent from message creation order. */
+  readonly branchOrder: number
   readonly createdAt: string
   readonly updatedAt: string
 }
 
 export type SessionNode = VirtualRootNode | MessageNode
+
+export interface EmptyBranch {
+  readonly id: string
+  readonly anchorId: string
+  readonly branchOrder: number
+  readonly createdAt: string
+  readonly updatedAt: string
+}
 
 export interface Session {
   readonly id: string
@@ -32,6 +42,8 @@ export interface Session {
   readonly titleInitialized: boolean
   readonly rootId: string
   readonly currentLeafId: string | null
+  readonly currentEmptyBranchId: string | null
+  readonly emptyBranches: Readonly<Record<string, EmptyBranch>>
   readonly nodes: Readonly<Record<string, SessionNode>>
   readonly createdAt: string
   readonly updatedAt: string
@@ -68,6 +80,8 @@ export function createSession(input: CreateSessionInput): Session {
     titleInitialized: false,
     rootId: root.id,
     currentLeafId: null,
+    currentEmptyBranchId: null,
+    emptyBranches: {},
     nodes: { [root.id]: root },
     createdAt: input.createdAt,
     updatedAt: input.createdAt
@@ -78,11 +92,27 @@ export function appendMessage(
   session: Session,
   input: AppendMessageInput
 ): Session {
-  if (session.nodes[input.id] !== undefined) {
+  if (
+    session.nodes[input.id] !== undefined ||
+    session.emptyBranches[input.id] !== undefined
+  ) {
     throw new Error(`Message node already exists: ${input.id}`)
   }
 
-  const parentId = session.currentLeafId ?? session.rootId
+  const selectedEmptyBranch =
+    session.currentEmptyBranchId === null
+      ? undefined
+      : session.emptyBranches[session.currentEmptyBranchId]
+  if (session.currentEmptyBranchId !== null && selectedEmptyBranch === undefined) {
+    throw new Error(
+      `Current empty branch does not exist: ${session.currentEmptyBranchId}`
+    )
+  }
+  if (selectedEmptyBranch !== undefined && session.currentLeafId !== null) {
+    throw new Error('Current branch cannot select a leaf and an empty branch')
+  }
+
+  const parentId = selectedEmptyBranch?.anchorId ?? session.currentLeafId ?? session.rootId
   const parent = session.nodes[parentId]
 
   if (parent === undefined) {
@@ -104,6 +134,7 @@ export function appendMessage(
     text: input.text,
     status: 'normal',
     createdOrder: nextCreatedOrder(session),
+    branchOrder: selectedEmptyBranch?.branchOrder ?? nextBranchOrder(session),
     createdAt: input.createdAt,
     updatedAt: input.createdAt
   }
@@ -119,6 +150,15 @@ export function appendMessage(
     title: shouldGenerateTitle ? takeGraphemes(input.text, 20) : session.title,
     titleInitialized: session.titleInitialized || shouldGenerateTitle,
     currentLeafId: message.id,
+    currentEmptyBranchId: null,
+    emptyBranches:
+      selectedEmptyBranch === undefined
+        ? session.emptyBranches
+        : Object.fromEntries(
+            Object.entries(session.emptyBranches).filter(
+              ([id]) => id !== selectedEmptyBranch.id
+            )
+          ),
     nodes: {
       ...session.nodes,
       [updatedParent.id]: updatedParent,
@@ -129,17 +169,34 @@ export function appendMessage(
 }
 
 export function getCurrentPath(session: Session): readonly MessageNode[] {
-  if (session.currentLeafId === null) {
+  const selectedEmptyBranch =
+    session.currentEmptyBranchId === null
+      ? undefined
+      : session.emptyBranches[session.currentEmptyBranchId]
+  if (session.currentEmptyBranchId !== null && selectedEmptyBranch === undefined) {
+    throw new Error(
+      `Current empty branch does not exist: ${session.currentEmptyBranchId}`
+    )
+  }
+  if (selectedEmptyBranch !== undefined && session.currentLeafId !== null) {
+    throw new Error('Current branch cannot select a leaf and an empty branch')
+  }
+  if (session.currentLeafId === null && selectedEmptyBranch === undefined) {
     return []
   }
 
-  if (session.currentLeafId === session.rootId) {
+  const terminalId = selectedEmptyBranch?.anchorId ?? session.currentLeafId
+  if (terminalId === session.rootId) {
+    if (selectedEmptyBranch !== undefined) return []
     throw new Error('Virtual root cannot be the current leaf')
+  }
+  if (terminalId === null || terminalId === undefined) {
+    throw new Error('Current branch is missing a terminal node')
   }
 
   const path: MessageNode[] = []
   const visited = new Set<string>()
-  let nodeId = session.currentLeafId
+  let nodeId = terminalId
 
   while (nodeId !== session.rootId) {
     if (visited.has(nodeId)) {
@@ -158,7 +215,7 @@ export function getCurrentPath(session: Session): readonly MessageNode[] {
     nodeId = node.parentId
   }
 
-  if (path.at(-1)?.childIds.length !== 0) {
+  if (selectedEmptyBranch === undefined && path.at(-1)?.childIds.length !== 0) {
     throw new Error(`Current leaf has child nodes: ${session.currentLeafId}`)
   }
 
@@ -198,6 +255,18 @@ function nextCreatedOrder(session: Session): number {
       ...Object.values(session.nodes)
         .filter((node): node is MessageNode => node.kind === 'message')
         .map((node) => node.createdOrder)
+    ) + 1
+  )
+}
+
+export function nextBranchOrder(session: Session): number {
+  return (
+    Math.max(
+      0,
+      ...Object.values(session.nodes)
+        .filter((node): node is MessageNode => node.kind === 'message')
+        .map((node) => node.branchOrder),
+      ...Object.values(session.emptyBranches).map((branch) => branch.branchOrder)
     ) + 1
   )
 }

@@ -58,13 +58,17 @@ a {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: 360px minmax(0, 1fr);
   min-height: 100vh;
   transition: grid-template-columns 160ms ease;
 }
 
 .app-shell--collapsed {
   grid-template-columns: 64px minmax(0, 1fr);
+}
+
+.app-shell--fullscreen {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .sidebar {
@@ -76,6 +80,14 @@ a {
   border-right: 1px solid var(--color-border);
   background: var(--color-surface);
   overflow: hidden;
+}
+
+.sidebar--fullscreen {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  width: 100%;
+  box-shadow: var(--shadow-overlay);
 }
 
 .sidebar h1,
@@ -121,7 +133,8 @@ a {
   gap: 8px;
 }
 
-.sidebar a {
+.sidebar a,
+.sidebar__nav button {
   display: flex;
   align-items: center;
   min-height: 44px;
@@ -134,19 +147,30 @@ a {
   white-space: nowrap;
 }
 
+.sidebar__nav button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
 .sidebar a svg,
+.sidebar__nav button svg,
 .icon-button svg {
   width: 20px;
   height: 20px;
   flex: 0 0 auto;
 }
 
-.sidebar a:hover {
+.sidebar a:hover,
+.sidebar__nav button:hover {
   background: var(--color-canvas);
   color: var(--color-text);
 }
 
-.sidebar a.router-link-active {
+.sidebar a.router-link-active,
+.sidebar__nav button.is-active {
   box-shadow: inset 3px 0 0 var(--color-primary);
   background: var(--color-primary-subtle);
   color: var(--color-primary);
@@ -157,12 +181,22 @@ a {
   padding: 0;
 }
 
+.app-shell--collapsed .sidebar__nav button {
+  justify-content: center;
+  padding: 0;
+}
+
 .app-shell--collapsed .sidebar a span {
   display: none;
 }
 
 .sidebar__settings {
   margin-top: auto;
+}
+
+.sidebar__panel {
+  min-height: 0;
+  overflow: auto;
 }
 
 .content {
@@ -223,7 +257,7 @@ a {
     top: 0;
     bottom: 0;
     left: 0;
-    width: 224px;
+    width: 100vw;
     padding-top: 12px;
     box-shadow: var(--shadow-overlay);
     transform: translateX(-100%);
@@ -232,6 +266,10 @@ a {
 
   .sidebar--mobile-open {
     transform: translateX(0);
+  }
+
+  .sidebar--fullscreen {
+    width: 100vw;
   }
 
   .sidebar__collapse {

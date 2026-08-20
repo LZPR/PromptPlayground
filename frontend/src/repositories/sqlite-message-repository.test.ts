@@ -48,6 +48,7 @@ function node(
     text: `${id} text`,
     status: 'normal',
     createdOrder,
+    branchOrder: createdOrder,
     createdAt,
     updatedAt: createdAt
   }
@@ -63,6 +64,8 @@ function session(
     titleInitialized: false,
     rootId: 'root-1',
     currentLeafId,
+    currentEmptyBranchId: null,
+    emptyBranches: {},
     nodes: {
       'root-1': { kind: 'root', id: 'root-1', childIds: ['u-1'] },
       ...Object.fromEntries(nodes.map((message) => [message.id, message]))
@@ -73,6 +76,39 @@ function session(
 }
 
 describe('[message repository] save mutation [commits ordered tree writes]', () => {
+  it('writes an empty branch copy and its current selection in one transaction', async () => {
+    const previous = {
+      ...session([node('u-1', 'root-1', 'user', 1)], 'u-1'),
+      currentLeafId: null,
+      currentEmptyBranchId: 'empty-1',
+      emptyBranches: {
+        'empty-1': {
+          id: 'empty-1', anchorId: 'u-1', branchOrder: 2,
+          createdAt, updatedAt: createdAt
+        }
+      }
+    }
+    const next = copyCurrentBranch(previous, {
+      ids: [], emptyBranchId: 'empty-2', updatedAt: changedAt
+    })
+    const client = new FakeSqlClient()
+
+    await new SqliteMessageRepository(client).saveMutation(previous, next)
+
+    expect(client.executions.map(({ query }) => query)).toEqual([
+      'BEGIN IMMEDIATE',
+      expect.stringContaining('INSERT INTO empty_branches'),
+      expect.stringContaining('UPDATE sessions'),
+      'COMMIT'
+    ])
+    expect(client.executions[1].values).toEqual([
+      'empty-2', 'session-1', 'u-1', 3, changedAt, changedAt
+    ])
+    expect(client.executions[2].values).toEqual([
+      null, 'empty-2', changedAt, 'session-1'
+    ])
+  })
+
   it('inserts copied nodes before updating the selected leaf', async () => {
     const previous = session(
       [
@@ -104,11 +140,13 @@ describe('[message repository] save mutation [commits ordered tree writes]', () 
       'a-1 text',
       'normal',
       4,
+      4,
       changedAt,
       changedAt
     ])
     expect(client.executions[2].values).toEqual([
       'a-1-copy',
+      null,
       changedAt,
       'session-1'
     ])

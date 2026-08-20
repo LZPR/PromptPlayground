@@ -1,6 +1,6 @@
 import Database from '@tauri-apps/plugin-sql'
 import { assertSessionTree } from '@/domain'
-import type { MessageNode, Session } from '@/domain'
+import type { EmptyBranch, MessageNode, Session } from '@/domain'
 import type { MessageRepository } from './index'
 import {
   SESSION_DATABASE_URL,
@@ -37,11 +37,17 @@ export class SqliteMessageRepository implements MessageRepository {
           [message.id, previous.id]
         )
       }
+      for (const branch of removedEmptyBranches(previous, next)) {
+        await client.execute(
+          'DELETE FROM empty_branches WHERE id = $1 AND session_id = $2',
+          [branch.id, previous.id]
+        )
+      }
       for (const message of addedMessages(previous, next)) {
         await client.execute(
           `INSERT INTO session_nodes
-             (id, session_id, parent_id, node_type, role, text, status, created_order, created_at, updated_at)
-           VALUES ($1, $2, $3, 'message', $4, $5, $6, $7, $8, $9)`,
+             (id, session_id, parent_id, node_type, role, text, status, created_order, branch_order, created_at, updated_at)
+           VALUES ($1, $2, $3, 'message', $4, $5, $6, $7, $8, $9, $10)`,
           [
             message.id,
             next.id,
@@ -50,16 +56,32 @@ export class SqliteMessageRepository implements MessageRepository {
             message.text,
             message.status,
             message.createdOrder,
+            message.branchOrder,
             message.createdAt,
             message.updatedAt
           ]
         )
       }
+      for (const branch of addedEmptyBranches(previous, next)) {
+        await client.execute(
+          `INSERT INTO empty_branches
+             (id, session_id, anchor_id, branch_order, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            branch.id,
+            next.id,
+            branch.anchorId,
+            branch.branchOrder,
+            branch.createdAt,
+            branch.updatedAt
+          ]
+        )
+      }
       await client.execute(
         `UPDATE sessions
-         SET current_leaf_id = $1, updated_at = $2
-         WHERE id = $3`,
-        [next.currentLeafId, next.updatedAt, next.id]
+         SET current_leaf_id = $1, current_empty_branch_id = $2, updated_at = $3
+         WHERE id = $4`,
+        [next.currentLeafId, next.currentEmptyBranchId, next.updatedAt, next.id]
       )
       await client.execute('COMMIT')
     } catch (error) {
@@ -73,6 +95,24 @@ export class SqliteMessageRepository implements MessageRepository {
       throw error
     }
   }
+}
+
+function removedEmptyBranches(
+  previous: Session,
+  next: Session
+): readonly EmptyBranch[] {
+  return Object.values(previous.emptyBranches).filter(
+    (branch) => next.emptyBranches[branch.id] === undefined
+  )
+}
+
+function addedEmptyBranches(
+  previous: Session,
+  next: Session
+): readonly EmptyBranch[] {
+  return Object.values(next.emptyBranches).filter(
+    (branch) => previous.emptyBranches[branch.id] === undefined
+  )
 }
 
 function removedMessages(

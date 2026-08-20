@@ -4,6 +4,7 @@ export {
   DEFAULT_SESSION_TITLE,
   deleteSession,
   getCurrentPath,
+  nextBranchOrder,
   renameSession,
   takeGraphemes
 } from './session'
@@ -25,12 +26,14 @@ export {
   deleteBranch,
   getCurrentBranchPath,
   getDirectChildBranches,
+  selectCurrentEmptyBranch,
   selectCurrentLeaf,
   switchDirectChildBranch
 } from './branch'
 export type {
   AppendMessageInput,
   CreateSessionInput,
+  EmptyBranch,
   MessageNode,
   MessageRole,
   MessageStatus,
@@ -51,7 +54,9 @@ export type {
 export type {
   CopyCurrentBranchInput,
   DeleteBranchInput,
+  DirectBranchEntry,
   DirectChildBranch,
+  SelectCurrentEmptyBranchInput,
   SelectCurrentLeafInput,
   SwitchDirectChildBranchInput
 } from './branch'
