@@ -1,4 +1,4 @@
-import type { Session } from '@/domain'
+import type { GlobalSettings, SavedSettings, Session } from '@/domain'
 
 export interface SessionRepository {
   readonly repositoryType: 'session'
@@ -15,6 +15,10 @@ export interface MessageRepository {
 
 export interface SettingsRepository {
   readonly repositoryType: 'settings'
+  load(): Promise<GlobalSettings>
+  save(settings: SavedSettings): Promise<GlobalSettings>
+  saveApiKey(value: string): Promise<GlobalSettings>
+  clearApiKey(): Promise<GlobalSettings>
 }
 
 export {
@@ -22,4 +26,6 @@ export {
   SqliteSessionRepository
 } from './sqlite-session-repository'
 export { SqliteMessageRepository } from './sqlite-message-repository'
+export { TauriSettingsRepository } from './tauri-settings-repository'
+export { MemoryMessageRepository, MemorySessionRepository } from './memory-repositories'
 export type { SqlClient } from './sqlite-session-repository'

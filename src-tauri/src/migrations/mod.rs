@@ -80,6 +80,22 @@ pub fn migrations() -> Vec<Migration> {
             CREATE INDEX empty_branches_by_anchor
                 ON empty_branches(session_id, anchor_id, branch_order);
         "#,
+    }, Migration {
+        version: 2,
+        description: "create_global_settings",
+        kind: MigrationKind::Up,
+        sql: r#"
+            CREATE TABLE global_settings (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                base_url TEXT NOT NULL,
+                model TEXT NOT NULL,
+                temperature REAL NOT NULL,
+                max_output INTEGER NOT NULL,
+                stream INTEGER NOT NULL CHECK (stream IN (0, 1)),
+                display_mode TEXT NOT NULL CHECK (display_mode IN ('raw', 'markdown')),
+                updated_at TEXT NOT NULL
+            );
+        "#,
     }]
 }
 
@@ -91,12 +107,14 @@ mod tests {
     fn registers_the_session_foundation_migration() {
         let migrations = migrations();
 
-        assert_eq!(migrations.len(), 1);
+        assert_eq!(migrations.len(), 2);
         assert_eq!(migrations[0].version, 1);
         assert!(migrations[0].sql.contains("CREATE TABLE sessions"));
         assert!(migrations[0].sql.contains("current_empty_branch_id"));
         assert!(migrations[0].sql.contains("branch_order"));
         assert!(migrations[0].sql.contains("CREATE TABLE empty_branches"));
         assert!(migrations[0].sql.contains("ON DELETE CASCADE"));
+        assert_eq!(migrations[1].version, 2);
+        assert!(migrations[1].sql.contains("CREATE TABLE global_settings"));
     }
 }

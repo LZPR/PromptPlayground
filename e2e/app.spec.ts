@@ -43,3 +43,20 @@ test('[app] settings [uses its own route]', async ({ page }) => {
   await expect(page).toHaveURL(/#\/settings$/)
   await expect(page.getByRole('heading', { name: '全局设置' })).toBeVisible()
 })
+
+test('[generation] browser adapter [saves settings and renders a streamed response]', async ({ page }) => {
+  await page.goto('/#/chat')
+  await page.getByRole('link', { name: '全局设置' }).click()
+
+  await page.getByLabel('Base URL').fill('https://example.test/v1')
+  await page.getByLabel('API Key').fill('test-key')
+  await page.getByLabel('模型名').fill('test-model')
+  await page.getByRole('button', { name: '保存设置' }).click()
+  await page.goBack()
+
+  await page.getByRole('button', { name: '新建' }).click()
+  await page.getByLabel('消息内容').fill('Hello')
+  await page.getByRole('button', { name: '发送' }).click()
+
+  await expect(page.getByText('浏览器预览响应。')).toBeVisible()
+})

@@ -22,3 +22,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+futures-util = "0.3"
+reqwest = { version = "0.13", features = ["json", "stream", "rustls"] }
+rusqlite = "0.31"
+tokio = { version = "1", features = ["rt", "time"] }
+uuid = { version = "1", features = ["v4"] }

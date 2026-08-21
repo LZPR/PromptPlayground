@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { appendMessage, createSession, editMessage } from '@/domain'
 import type { MessageRepository, SessionRepository } from '@/repositories'
+import type { GenerationClient, GenerationSubscription, StartGenerationRequest } from '@/services/generation'
 import { useSessionStore } from './sessions'
 
 const createdAt = '2026-08-20T00:00:00.000Z'
@@ -28,6 +29,29 @@ function createMessageRepository(
     saveMutation: vi.fn().mockResolvedValue(undefined),
     ...overrides
   }
+}
+
+function generationClient(): GenerationClient & {
+  readonly subscription: GenerationSubscription | undefined
+  readonly request: StartGenerationRequest | undefined
+} {
+  let subscription: GenerationSubscription | undefined
+  let request: StartGenerationRequest | undefined
+  return {
+    get subscription() { return subscription },
+    get request() { return request },
+    start: vi.fn().mockImplementation(async (input: StartGenerationRequest, events: GenerationSubscription) => {
+      request = input
+      subscription = events
+      return 'request-1'
+    }),
+    cancel: vi.fn().mockResolvedValue(undefined)
+  }
+}
+
+const configuredSettings = {
+  baseUrl: 'https://example.test/v1', apiKeyPresent: true, model: 'test-model',
+  temperature: 0.7, maxOutput: 1024, stream: true, displayMode: 'markdown' as const
 }
 
 function branchSession() {
@@ -139,5 +163,40 @@ describe('[session store] mutations [persist before updating local state]', () =
 
     expect(store.sessions).toEqual([session])
     expect(store.currentSession).toEqual(session)
+  })
+})
+
+describe('[session store] generation [persists events and isolates runtime failures]', () => {
+  it('streams, completes, and clears the active request', async () => {
+    setActivePinia(createPinia())
+    const source = appendMessage(createSession({ id: 'session-1', rootId: 'root-1', createdAt }), { id: 'u-1', role: 'user', text: 'Question', createdAt })
+    const store = useSessionStore()
+    await store.initialize(createRepository({ loadAll: vi.fn().mockResolvedValue([source]) }))
+    const messages = createMessageRepository()
+    const client = generationClient()
+
+    await store.regenerate(messages, client, configuredSettings)
+    expect(store.isGenerating('session-1')).toBe(true)
+    expect(client.request?.messages).toEqual([{ role: 'user', content: 'Question' }])
+    client.subscription?.delta({ requestId: 'request-1', sessionId: 'session-1', messageId: client.request!.messageId, text: 'partial' })
+    client.subscription?.completed({ requestId: 'request-1', sessionId: 'session-1', messageId: client.request!.messageId })
+    await vi.waitFor(() => {
+      expect(store.currentSession?.nodes[client.request!.messageId]).toMatchObject({ text: 'partial', status: 'normal' })
+      expect(store.isGenerating('session-1')).toBe(false)
+    })
+  })
+
+  it('marks failed output and records a temporary safe error', async () => {
+    setActivePinia(createPinia())
+    const source = appendMessage(createSession({ id: 'session-1', rootId: 'root-1', createdAt }), { id: 'u-1', role: 'user', text: 'Question', createdAt })
+    const store = useSessionStore()
+    await store.initialize(createRepository({ loadAll: vi.fn().mockResolvedValue([source]) }))
+    const client = generationClient()
+    await store.regenerate(createMessageRepository(), client, configuredSettings)
+    client.subscription?.failed({ requestId: 'request-1', sessionId: 'session-1', messageId: client.request!.messageId, statusCode: 429, error: 'slow down' })
+    await vi.waitFor(() => {
+      expect(store.currentSession?.nodes[client.request!.messageId]).toMatchObject({ status: 'failed' })
+      expect(store.generationErrors['session-1']?.summary).toBe('429 - 请求过于频繁')
+    })
   })
 })

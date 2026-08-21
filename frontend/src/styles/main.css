@@ -96,6 +96,117 @@ a {
   margin: 0;
 }
 
+.primary-button,
+.danger-button,
+.text-button {
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.primary-button {
+  padding: 0 14px;
+  background: var(--color-primary);
+  color: var(--color-surface);
+}
+
+.primary-button:disabled,
+.danger-button:disabled {
+  background: var(--color-disabled-surface);
+  color: var(--color-disabled);
+  cursor: not-allowed;
+}
+
+.danger-button {
+  padding: 0 12px;
+  border-color: var(--color-danger);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
+.text-button {
+  padding: 0 4px;
+  background: transparent;
+  color: var(--color-primary);
+}
+
+.settings-view,
+.chat-view {
+  min-height: calc(100vh - 64px);
+}
+
+.settings-form {
+  display: grid;
+  max-width: 600px;
+  gap: 16px;
+}
+
+.settings-form label,
+.settings-form fieldset {
+  display: grid;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.settings-form input:not([type='checkbox']):not([type='radio']),
+.chat-composer textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.settings-form__key,
+.settings-form__grid,
+.settings-form__actions,
+.chat-composer__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-form__grid > label { flex: 1; }
+.settings-form fieldset { border: 1px solid var(--color-border); border-radius: var(--radius-control); padding: 10px; }
+.settings-form fieldset label { display: inline-flex; margin-right: 16px; }
+.settings-form__toggle { display: flex !important; align-items: center; }
+.settings-form__actions { justify-content: flex-end; }
+.form-error { color: var(--color-danger) !important; }
+
+.chat-view { display: grid !important; grid-template-rows: auto minmax(0, 1fr) auto; gap: 16px !important; max-width: none !important; }
+.chat-empty { display: grid; place-items: center; align-content: center; gap: 16px; min-height: 320px; }
+.chat-messages { display: grid; align-content: start; gap: 12px; overflow-y: auto; padding-right: 4px; }
+.chat-message { max-width: min(760px, 88%); padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-message); background: var(--color-surface); }
+.chat-message--user { justify-self: end; border-color: var(--color-primary); background: var(--color-primary-subtle); }
+.chat-message--system { background: #f1f5f9; }
+.chat-message--failed, .chat-message--cancelled { border-color: var(--color-warning); }
+.chat-message header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: var(--color-text-secondary); font-size: 12px; }
+.chat-message pre, .generation-error pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.55; }
+.chat-message__markdown > :first-child { margin-top: 0; }
+.chat-message__markdown > :last-child { margin-bottom: 0; }
+.chat-message footer { margin-top: 8px; }
+.generation-error { max-width: 760px; padding: 12px; border-left: 3px solid var(--color-danger); background: var(--color-danger-subtle); }
+.generation-error details { margin: 8px 0; }
+.chat-composer { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--color-border); }
+.chat-composer textarea { resize: vertical; max-height: 280px; }
+.chat-composer__actions { justify-content: flex-end; }
+.chat-composer__actions span { margin-right: auto; color: var(--color-text-secondary); }
+.session-panel ul { display: grid; margin: 12px 0 0; padding: 0; gap: 6px; list-style: none; }
+.session-panel li button { display: flex; width: 100%; justify-content: space-between; gap: 8px; padding: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); text-align: left; cursor: pointer; }
+.session-panel li button.is-current { border-color: var(--color-primary); background: var(--color-primary-subtle); }
+
+@media (max-width: 767px) {
+  .settings-form__grid { display: grid; }
+  .settings-form__key { align-items: stretch; flex-direction: column; }
+  .chat-view { min-height: calc(100vh - 104px); }
+  .chat-message { max-width: 100%; }
+}
+
 .sidebar h1 {
   overflow: hidden;
   font-size: 16px;

@@ -77,6 +77,24 @@ export class SqliteMessageRepository implements MessageRepository {
           ]
         )
       }
+      for (const message of changedMessages(previous, next)) {
+        await client.execute(
+          `UPDATE session_nodes
+           SET parent_id = $1, role = $2, text = $3, status = $4,
+               branch_order = $5, updated_at = $6
+           WHERE id = $7 AND session_id = $8`,
+          [
+            message.parentId,
+            message.role,
+            message.text,
+            message.status,
+            message.branchOrder,
+            message.updatedAt,
+            message.id,
+            next.id
+          ]
+        )
+      }
       await client.execute(
         `UPDATE sessions
          SET current_leaf_id = $1, current_empty_branch_id = $2, updated_at = $3
@@ -134,6 +152,23 @@ function addedMessages(previous: Session, next: Session): readonly MessageNode[]
         node.kind === 'message' && previous.nodes[node.id] === undefined
     )
     .sort((left, right) => depth(next, left) - depth(next, right))
+}
+
+function changedMessages(previous: Session, next: Session): readonly MessageNode[] {
+  return Object.values(next.nodes).filter(
+    (node): node is MessageNode => {
+      if (node.kind !== 'message') return false
+      const previousNode = previous.nodes[node.id]
+      return previousNode !== undefined && previousNode.kind === 'message' && (
+        previousNode.parentId !== node.parentId ||
+        previousNode.role !== node.role ||
+        previousNode.text !== node.text ||
+        previousNode.status !== node.status ||
+        previousNode.branchOrder !== node.branchOrder ||
+        previousNode.updatedAt !== node.updatedAt
+      )
+    }
+  )
 }
 
 function depth(session: Session, message: MessageNode): number {
