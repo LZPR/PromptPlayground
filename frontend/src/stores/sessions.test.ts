@@ -167,6 +167,20 @@ describe('[session store] mutations [persist before updating local state]', () =
 })
 
 describe('[session store] generation [persists events and isolates runtime failures]', () => {
+  it('continues the current branch without appending another user message', async () => {
+    setActivePinia(createPinia())
+    const source = appendMessage(createSession({ id: 'session-1', rootId: 'root-1', createdAt }), { id: 'u-1', role: 'user', text: 'Question', createdAt })
+    const store = useSessionStore()
+    await store.initialize(createRepository({ loadAll: vi.fn().mockResolvedValue([source]) }))
+    const client = generationClient()
+
+    await store.continueGeneration(createMessageRepository(), client, configuredSettings)
+
+    expect(client.request?.messages).toEqual([{ role: 'user', content: 'Question' }])
+    expect(Object.values(store.currentSession!.nodes).filter((node) => node.kind === 'message' && node.role === 'user')).toHaveLength(1)
+    expect(store.currentSession?.nodes[client.request!.messageId]).toMatchObject({ role: 'assistant', status: 'generating' })
+  })
+
   it('streams, completes, and clears the active request', async () => {
     setActivePinia(createPinia())
     const source = appendMessage(createSession({ id: 'session-1', rootId: 'root-1', createdAt }), { id: 'u-1', role: 'user', text: 'Question', createdAt })

@@ -67,6 +67,15 @@ export interface RenameSessionInput {
   readonly updatedAt: string
 }
 
+export interface CloneSessionInput {
+  readonly id: string
+  readonly rootId: string
+  readonly messageIds: readonly string[]
+  readonly emptyBranchIds: readonly string[]
+  readonly mode: 'full' | 'system'
+  readonly createdAt: string
+}
+
 export function createSession(input: CreateSessionInput): Session {
   const root: VirtualRootNode = {
     kind: 'root',
@@ -239,6 +248,108 @@ export function deleteSession(
   sessionId: string
 ): readonly Session[] {
   return sessions.filter((session) => session.id !== sessionId)
+}
+
+export function cloneSession(source: Session, input: CloneSessionInput): Session {
+  if (input.mode === 'system') {
+    const systemMessages = getCurrentPath(source).filter(
+      (message) => message.role === 'system'
+    )
+    if (input.messageIds.length !== systemMessages.length) {
+      throw new Error('System clone message IDs must match the selected messages')
+    }
+    const nodes: Record<string, SessionNode> = {
+      [input.rootId]: { kind: 'root', id: input.rootId, childIds: [] }
+    }
+    let parentId = input.rootId
+    for (const [index, message] of systemMessages.entries()) {
+      const id = input.messageIds[index]
+      if (id === undefined) throw new Error('System clone is missing a message ID')
+      nodes[parentId] = {
+        ...nodes[parentId],
+        childIds: [id]
+      } as SessionNode
+      nodes[id] = {
+        kind: 'message',
+        id,
+        parentId,
+        childIds: [],
+        role: 'system',
+        text: message.text,
+        status: 'normal',
+        createdOrder: index + 1,
+        branchOrder: index + 1,
+        createdAt: input.createdAt,
+        updatedAt: input.createdAt
+      }
+      parentId = id
+    }
+    return {
+      id: input.id,
+      title: `${source.title} - 副本`,
+      titleInitialized: true,
+      rootId: input.rootId,
+      currentLeafId: systemMessages.length === 0 ? null : parentId,
+      currentEmptyBranchId: null,
+      emptyBranches: {},
+      nodes,
+      createdAt: input.createdAt,
+      updatedAt: input.createdAt
+    }
+  }
+
+  const messages = Object.values(source.nodes)
+    .filter((node): node is MessageNode => node.kind === 'message')
+    .sort((left, right) => left.createdOrder - right.createdOrder || left.id.localeCompare(right.id))
+  const emptyBranches = Object.values(source.emptyBranches)
+    .sort((left, right) => left.branchOrder - right.branchOrder || left.id.localeCompare(right.id))
+  if (input.messageIds.length !== messages.length || input.emptyBranchIds.length !== emptyBranches.length) {
+    throw new Error('Full clone IDs must match the source tree')
+  }
+
+  const ids = new Map<string, string>([[source.rootId, input.rootId]])
+  messages.forEach((message, index) => ids.set(message.id, input.messageIds[index]!))
+  emptyBranches.forEach((branch, index) => ids.set(branch.id, input.emptyBranchIds[index]!))
+  const nodes: Record<string, SessionNode> = {
+    [input.rootId]: {
+      kind: 'root',
+      id: input.rootId,
+      childIds: source.nodes[source.rootId]!.childIds.map((id) => ids.get(id)!)
+    }
+  }
+  for (const message of messages) {
+    const id = ids.get(message.id)!
+    nodes[id] = {
+      ...message,
+      id,
+      parentId: ids.get(message.parentId)!,
+      childIds: message.childIds.map((childId) => ids.get(childId)!),
+      createdAt: input.createdAt,
+      updatedAt: input.createdAt
+    }
+  }
+  const clonedEmptyBranches = Object.fromEntries(emptyBranches.map((branch) => {
+    const id = ids.get(branch.id)!
+    return [id, {
+      ...branch,
+      id,
+      anchorId: ids.get(branch.anchorId)!,
+      createdAt: input.createdAt,
+      updatedAt: input.createdAt
+    }]
+  }))
+  return {
+    id: input.id,
+    title: `${source.title} - 副本`,
+    titleInitialized: true,
+    rootId: input.rootId,
+    currentLeafId: source.currentLeafId === null ? null : ids.get(source.currentLeafId)!,
+    currentEmptyBranchId: source.currentEmptyBranchId === null ? null : ids.get(source.currentEmptyBranchId)!,
+    emptyBranches: clonedEmptyBranches,
+    nodes,
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt
+  }
 }
 
 export function takeGraphemes(text: string, count: number): string {

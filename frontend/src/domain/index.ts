@@ -1,5 +1,6 @@
 export {
   appendMessage,
+  cloneSession,
   createSession,
   DEFAULT_SESSION_TITLE,
   deleteSession,
@@ -22,14 +23,17 @@ export {
 } from './message'
 export {
   copyCurrentBranch,
+  createEmptyBranch,
   countBranchMessages,
   deleteBranch,
   getCurrentBranchPath,
   getDirectChildBranches,
   selectCurrentEmptyBranch,
+  selectPathContainingMessage,
   selectCurrentLeaf,
   switchDirectChildBranch
 } from './branch'
+export { buildBranchTree } from './branch-tree'
 export {
   appendGenerationDelta,
   buildGenerationMessages,
@@ -43,6 +47,7 @@ export {
 export { clearApiKey, DEFAULT_GLOBAL_SETTINGS, updateSettings } from './settings'
 export type {
   AppendMessageInput,
+  CloneSessionInput,
   CreateSessionInput,
   EmptyBranch,
   MessageNode,
@@ -71,6 +76,7 @@ export type {
   SelectCurrentLeafInput,
   SwitchDirectChildBranchInput
 } from './branch'
+export type { BranchTreeEntry } from './branch-tree'
 export type {
   GenerationErrorRecord,
   GenerationRequestMessage,

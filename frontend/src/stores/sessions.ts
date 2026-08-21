@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import {
+  addMessage,
   appendMessage as appendMessageToSession,
   appendGenerationDelta,
   buildGenerationMessages,
@@ -7,15 +8,24 @@ import {
   completeGeneration,
   copyCurrentBranch as copyCurrentSessionBranch,
   createGenerationError,
+  createEmptyBranch as createSessionEmptyBranch,
   createSession as createSessionModel,
+  cloneSession as cloneSessionModel,
   deleteBranch as deleteSessionBranch,
   deleteSession,
+  editMessage as editSessionMessage,
   failGeneration,
+  getCurrentPath,
   getCurrentBranchPath,
+  insertMessage as insertSessionMessage,
+  markMessagePendingDeletion,
+  permanentlyDeleteMessage,
   renameSession,
   selectCurrentLeaf as selectSessionCurrentLeaf,
   selectCurrentEmptyBranch as selectSessionCurrentEmptyBranch,
+  selectPathContainingMessage as selectSessionPathContainingMessage,
   startGeneration,
+  restoreMessage,
   switchDirectChildBranch as switchSessionDirectChildBranch
 } from '@/domain'
 import type { GenerationErrorRecord, GlobalSettings, MessageRole, Session } from '@/domain'
@@ -31,6 +41,14 @@ const generationEventQueues = new Map<string, Promise<void>>()
 export interface AppendSessionMessageInput {
   readonly role: MessageRole
   readonly text: string
+}
+
+export interface SaveMessageInput {
+  readonly mode: 'add-start' | 'add-end' | 'insert-before' | 'insert-after' | 'edit'
+  readonly targetId?: string
+  readonly role: MessageRole
+  readonly text: string
+  readonly createBranch?: boolean
 }
 
 interface ActiveGeneration {
@@ -73,6 +91,32 @@ export const useSessionStore = defineStore('sessions', {
       return session
     },
 
+    async cloneSession(
+      repository: SessionRepository,
+      mode: 'full' | 'system'
+    ) {
+      const source = this.requireCurrentSession()
+      if (this.isGenerating(source.id)) throw new Error('该会话正在生成，无法克隆')
+      const now = new Date().toISOString()
+      const messageCount = mode === 'full'
+        ? Object.values(source.nodes).filter((node) => node.kind === 'message').length
+        : getCurrentPath(source).filter((message) => message.role === 'system').length
+      const clone = cloneSessionModel(source, {
+        id: crypto.randomUUID(),
+        rootId: crypto.randomUUID(),
+        messageIds: Array.from({ length: messageCount }, () => crypto.randomUUID()),
+        emptyBranchIds: mode === 'full'
+          ? Object.values(source.emptyBranches).map(() => crypto.randomUUID())
+          : [],
+        mode,
+        createdAt: now
+      })
+      await repository.create(clone)
+      this.sessions = [clone, ...this.sessions]
+      this.currentSessionId = clone.id
+      return clone
+    },
+
     async appendMessage(
       repository: MessageRepository,
       input: AppendSessionMessageInput
@@ -96,6 +140,65 @@ export const useSessionStore = defineStore('sessions', {
       this.replaceSession(nextSession)
       this.clearGenerationError(session.id)
       return nextSession
+    },
+
+    async saveMessage(repository: MessageRepository, input: SaveMessageInput) {
+      const session = this.requireMutableCurrentSession()
+      const now = new Date().toISOString()
+      const targetId = input.targetId
+      const next = input.mode === 'add-start' || input.mode === 'add-end'
+        ? addMessage(session, {
+            id: crypto.randomUUID(),
+            position: input.mode === 'add-start' ? 'start' : 'end',
+            role: input.role,
+            text: input.text,
+            createdAt: now
+          })
+        : input.mode === 'insert-before' || input.mode === 'insert-after'
+          ? insertSessionMessage(session, {
+              id: crypto.randomUUID(),
+              targetId: requireTargetId(targetId),
+              position: input.mode === 'insert-before' ? 'before' : 'after',
+              role: input.role,
+              text: input.text,
+              createdAt: now
+            })
+          : editSessionMessage(session, {
+              targetId: requireTargetId(targetId),
+              id: input.createBranch ? crypto.randomUUID() : undefined,
+              role: input.role,
+              text: input.text,
+              createBranch: input.createBranch ?? true,
+              updatedAt: now
+            })
+      await repository.saveMutation(session, next)
+      this.replaceSession(next)
+      this.clearGenerationError(session.id)
+      return next
+    },
+
+    async markMessagePendingDeletion(repository: MessageRepository, messageId: string) {
+      const session = this.requireMutableCurrentSession()
+      const next = markMessagePendingDeletion(session, { messageId, updatedAt: new Date().toISOString() })
+      await repository.saveMutation(session, next)
+      this.replaceSession(next)
+      return next
+    },
+
+    async restoreMessage(repository: MessageRepository, messageId: string) {
+      const session = this.requireMutableCurrentSession()
+      const next = restoreMessage(session, { messageId, updatedAt: new Date().toISOString() })
+      await repository.saveMutation(session, next)
+      this.replaceSession(next)
+      return next
+    },
+
+    async permanentlyDeleteMessage(repository: MessageRepository, messageId: string) {
+      const session = this.requireMutableCurrentSession()
+      const next = permanentlyDeleteMessage(session, { messageId, updatedAt: new Date().toISOString() })
+      await repository.saveMutation(session, next)
+      this.replaceSession(next)
+      return next
     },
 
     async renameSession(repository: SessionRepository, title: string) {
@@ -154,6 +257,29 @@ export const useSessionStore = defineStore('sessions', {
       return nextSession
     },
 
+    async createEmptyBranch(repository: MessageRepository, anchorId: string) {
+      const session = this.requireMutableCurrentSession()
+      const next = createSessionEmptyBranch(session, {
+        id: crypto.randomUUID(),
+        anchorId,
+        updatedAt: new Date().toISOString()
+      })
+      await repository.saveMutation(session, next)
+      this.replaceSession(next)
+      return next
+    },
+
+    async selectPathContainingMessage(repository: MessageRepository, messageId: string) {
+      const session = this.requireCurrentSession()
+      const next = selectSessionPathContainingMessage(session, {
+        messageId,
+        updatedAt: new Date().toISOString()
+      })
+      await repository.saveMutation(session, next)
+      this.replaceSession(next)
+      return next
+    },
+
     async switchDirectChildBranch(
       repository: MessageRepository,
       forkId: string,
@@ -172,7 +298,7 @@ export const useSessionStore = defineStore('sessions', {
     },
 
     async deleteBranch(repository: MessageRepository, entryId: string) {
-      const session = this.requireCurrentSession()
+      const session = this.requireMutableCurrentSession()
       const nextSession = deleteSessionBranch(session, {
         entryId,
         updatedAt: new Date().toISOString()
@@ -184,6 +310,7 @@ export const useSessionStore = defineStore('sessions', {
     },
 
     async deleteSession(repository: SessionRepository, sessionId: string) {
+      if (this.isGenerating(sessionId)) throw new Error('该会话正在生成，无法删除')
       await repository.delete(sessionId)
       const sessions = deleteSession(this.sessions, sessionId)
       this.sessions = sessions
@@ -376,6 +503,12 @@ export const useSessionStore = defineStore('sessions', {
       return session
     },
 
+    requireMutableCurrentSession(): Session {
+      const session = this.requireCurrentSession()
+      if (this.isGenerating(session.id)) throw new Error('该会话正在生成')
+      return session
+    },
+
     replaceSession(nextSession: Session) {
       this.sessions = this.sessions.map((session) =>
         session.id === nextSession.id ? nextSession : session
@@ -383,3 +516,8 @@ export const useSessionStore = defineStore('sessions', {
     }
   }
 })
+
+function requireTargetId(targetId: string | undefined): string {
+  if (targetId === undefined) throw new Error('消息操作缺少目标')
+  return targetId
+}

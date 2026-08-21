@@ -29,6 +29,17 @@ export interface DeleteBranchInput {
   readonly updatedAt: string
 }
 
+export interface CreateEmptyBranchInput {
+  readonly id: string
+  readonly anchorId: string
+  readonly updatedAt: string
+}
+
+export interface SelectPathContainingMessageInput {
+  readonly messageId: string
+  readonly updatedAt: string
+}
+
 export type DirectBranchEntry =
   | { readonly kind: 'message'; readonly value: MessageNode }
   | { readonly kind: 'empty'; readonly value: EmptyBranch }
@@ -65,6 +76,46 @@ export function selectCurrentEmptyBranch(
     session.emptyBranches,
     null,
     input.emptyBranchId,
+    input.updatedAt
+  )
+}
+
+export function createEmptyBranch(
+  session: Session,
+  input: CreateEmptyBranchInput
+): Session {
+  assertSessionTree(session)
+  requireNode(session, input.anchorId)
+  ensureNewBranchId(session, input.id)
+  const branch: EmptyBranch = {
+    id: input.id,
+    anchorId: input.anchorId,
+    branchOrder: nextBranchOrder(session),
+    createdAt: input.updatedAt,
+    updatedAt: input.updatedAt
+  }
+  return finish(
+    session,
+    session.nodes,
+    { ...session.emptyBranches, [branch.id]: branch },
+    null,
+    branch.id,
+    input.updatedAt
+  )
+}
+
+export function selectPathContainingMessage(
+  session: Session,
+  input: SelectPathContainingMessageInput
+): Session {
+  assertSessionTree(session)
+  const message = requireMessage(session, input.messageId)
+  return finish(
+    session,
+    session.nodes,
+    session.emptyBranches,
+    firstLeaf(session, message.id),
+    null,
     input.updatedAt
   )
 }
